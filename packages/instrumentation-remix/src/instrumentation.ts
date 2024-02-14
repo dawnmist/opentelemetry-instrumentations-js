@@ -347,8 +347,9 @@ export class RemixInstrumentation extends InstrumentationBase {
       return function patchCallRouteLoader(this: any): Promise<Response> {
         const [params] = arguments as unknown as any;
 
+        const dataRouteId = getDataRouteId(params.request.url);
         const span = plugin.tracer.startSpan(
-          `LOADER ${params.routeId}`,
+          `LOADER ${dataRouteId ?? params.routeId}`,
           { attributes: { [SemanticAttributes.CODE_FUNCTION]: "loader" } },
           opentelemetry.context.active()
         );
@@ -383,8 +384,9 @@ export class RemixInstrumentation extends InstrumentationBase {
         // Cast as `any` to avoid typescript errors since this is patching an older version
         const [params] = arguments as unknown as any;
 
+        const dataRouteId = getDataRouteId(params.request.url);
         const span = plugin.tracer.startSpan(
-          `LOADER ${params.match.route.id}`,
+          `LOADER ${dataRouteId ?? params.match.route.id}`,
           { attributes: { [SemanticAttributes.CODE_FUNCTION]: "loader" } },
           opentelemetry.context.active()
         );
@@ -418,8 +420,9 @@ export class RemixInstrumentation extends InstrumentationBase {
       return async function patchCallRouteAction(this: any): Promise<Response> {
         const [params] = arguments as unknown as any;
         const clonedRequest = params.request.clone();
+        const dataRouteId = getDataRouteId(clonedRequest.url);
         const span = plugin.tracer.startSpan(
-          `ACTION ${params.routeId}`,
+          `ACTION ${dataRouteId ?? params.routeId}`,
           { attributes: { [SemanticAttributes.CODE_FUNCTION]: "action" } },
           opentelemetry.context.active()
         );
@@ -473,8 +476,9 @@ export class RemixInstrumentation extends InstrumentationBase {
         // Cast as `any` to avoid typescript errors since this is patching an older version
         const [params] = arguments as unknown as any;
         const clonedRequest = params.request.clone();
+        const dataRouteId = getDataRouteId(clonedRequest.url);
         const span = plugin.tracer.startSpan(
-          `ACTION ${params.match.route.id}`,
+          `ACTION ${dataRouteId ?? params.match.route.id}`,
           { attributes: { [SemanticAttributes.CODE_FUNCTION]: "action" } },
           opentelemetry.context.active()
         );
