@@ -261,14 +261,20 @@ export class RemixInstrumentation extends InstrumentationBase {
   private _patchMatchServerRoutes(): (original: typeof remixRunServerRuntimeRouteMatching.matchServerRoutes) => any {
     const plugin = this;
     return function matchServerRoutes(original) {
-      return function patchMatchServerRoutes(this: any): RouteMatch<ServerRoute> {
-        const result = original.apply(this, arguments as any);
+      return function patchMatchServerRoutes(this: any): RouteMatch<ServerRoute>[] {
+        const result: RouteMatch<ServerRoute>[] = original.apply(this, arguments as any);
 
         const span = opentelemetry.trace.getSpan(opentelemetry.context.active());
 
         const route = (result || []).slice(-1)[0]?.route;
 
-        const routePath = route?.path;
+        const routePath =
+          "/" +
+          result
+            .map((r) => r.route.path)
+            .filter((path) => !!path)
+            .join("/");
+
         if (span && routePath) {
           span.setAttribute(SemanticAttributes.HTTP_ROUTE, routePath);
           span.updateName(`remix.request ${routePath}`);
