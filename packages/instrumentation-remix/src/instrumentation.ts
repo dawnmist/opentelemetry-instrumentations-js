@@ -1,4 +1,5 @@
 import opentelemetry, { Span, SpanStatusCode } from "@opentelemetry/api";
+import { getRPCMetadata, RPCType } from "@opentelemetry/core";
 import {
   InstrumentationBase,
   InstrumentationConfig,
@@ -283,6 +284,17 @@ export class RemixInstrumentation extends InstrumentationBase {
         const routeId = route?.id;
         if (span && routeId) {
           span.setAttribute(RemixSemanticAttributes.MATCH_ROUTE_ID, routeId);
+        }
+
+        const rpcMetadata = getRPCMetadata(opentelemetry.context.active());
+        if (rpcMetadata?.type === RPCType.HTTP) {
+          if (routePath) {
+            rpcMetadata.route = routePath;
+            rpcMetadata.span.setAttribute(SemanticAttributes.HTTP_ROUTE, routePath);
+          }
+          if (routeId) {
+            rpcMetadata.span.setAttribute(RemixSemanticAttributes.MATCH_ROUTE_ID, routeId);
+          }
         }
 
         return result;
