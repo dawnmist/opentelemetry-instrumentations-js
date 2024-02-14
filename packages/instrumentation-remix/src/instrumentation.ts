@@ -22,6 +22,7 @@ import { VERSION } from "./version";
 const RemixSemanticAttributes = {
   MATCH_PARAMS: "match.params",
   MATCH_ROUTE_ID: "match.route.id",
+  MATCH_DATA_ROUTE_ID: "match.data.route.id",
 };
 
 export interface RemixInstrumentationConfig extends InstrumentationConfig {
@@ -533,6 +534,11 @@ const addRequestAttributesToSpan = (span: Span, request: Request) => {
     [SemanticAttributes.HTTP_METHOD]: request.method,
     [SemanticAttributes.HTTP_URL]: request.url,
   });
+
+  const dataRouteId = getDataRouteId(request.url);
+  if (dataRouteId) {
+    span.setAttribute(RemixSemanticAttributes.MATCH_DATA_ROUTE_ID, dataRouteId);
+  }
 };
 
 const addMatchAttributesToSpan = (span: Span, match: { routeId: string; params: Params<string> }) => {
@@ -564,4 +570,11 @@ const addErrorAttributesToSpan = (span: Span, error: Error) => {
   if (error.stack) {
     span.setAttribute(SemanticAttributes.EXCEPTION_STACKTRACE, error.stack);
   }
+};
+
+const getDataRouteId = (url: string) => {
+  if (url.includes("_data=")) {
+    return "_data=" + decodeURIComponent(url.substring(url.indexOf("_data=")));
+  }
+  return null;
 };
