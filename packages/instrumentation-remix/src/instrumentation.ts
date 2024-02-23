@@ -277,7 +277,7 @@ export class RemixInstrumentation extends InstrumentationBase {
             .filter((path) => !!path)
             .join("/");
 
-        if (span && routePath) {
+        if (span) {
           span.setAttribute(SemanticAttributes.HTTP_ROUTE, routePath);
           span.updateName(`remix.request ${routePath}`);
         }
@@ -333,6 +333,16 @@ export class RemixInstrumentation extends InstrumentationBase {
               throw error;
             })
             .finally(() => {
+              const rpcMetadata = getRPCMetadata(opentelemetry.context.active());
+              if (rpcMetadata?.type === RPCType.HTTP) {
+                addDataRouteAttributesToSpan(span, request.url, rpcMetadata.route, request.method);
+                rpcMetadata.route = addDataRouteAttributesToSpan(
+                  rpcMetadata.span,
+                  request.url,
+                  rpcMetadata.route,
+                  request.method
+                );
+              }
               span.end();
             });
         };
@@ -356,6 +366,7 @@ export class RemixInstrumentation extends InstrumentationBase {
 
         addRequestAttributesToSpan(span, params.request);
         addMatchAttributesToSpan(span, { routeId: params.routeId, params: params.params });
+        addDataRouteAttributesToSpan(span, params.request.url, params.routeId, "LOADER");
 
         const rpcMetadata = getRPCMetadata(opentelemetry.context.active());
         if (rpcMetadata?.type === RPCType.HTTP) {
@@ -405,18 +416,7 @@ export class RemixInstrumentation extends InstrumentationBase {
 
         addRequestAttributesToSpan(span, params.request);
         addMatchAttributesToSpan(span, { routeId: params.match.route.id, params: params.match.params });
-
-        const rpcMetadata = getRPCMetadata(opentelemetry.context.active());
-        if (rpcMetadata?.type === RPCType.HTTP) {
-          if (dataRouteId) {
-            rpcMetadata.route = dataRouteId;
-            rpcMetadata.span.setAttribute(SemanticAttributes.HTTP_ROUTE, rpcMetadata.route);
-          }
-          addMatchAttributesToSpan(rpcMetadata.span, {
-            routeId: params.match.route.id,
-            params: params.match.params,
-          });
-        }
+        addDataRouteAttributesToSpan(span, params.request.url, params.match.routeId, "LOADER");
 
         return opentelemetry.context.with(opentelemetry.trace.setSpan(opentelemetry.context.active(), span), () => {
           const originalResponsePromise: Promise<Response> = original.apply(this, arguments as any);
@@ -453,18 +453,7 @@ export class RemixInstrumentation extends InstrumentationBase {
 
         addRequestAttributesToSpan(span, clonedRequest);
         addMatchAttributesToSpan(span, { routeId: params.routeId, params: params.params });
-
-        const rpcMetadata = getRPCMetadata(opentelemetry.context.active());
-        if (rpcMetadata?.type === RPCType.HTTP) {
-          if (dataRouteId) {
-            rpcMetadata.route = dataRouteId;
-            rpcMetadata.span.setAttribute(SemanticAttributes.HTTP_ROUTE, rpcMetadata.route);
-          }
-          addMatchAttributesToSpan(rpcMetadata.span, {
-            routeId: params.routeId,
-            params: params.params,
-          });
-        }
+        addDataRouteAttributesToSpan(span, clonedRequest.url, params.routeId, "ACTION");
 
         return opentelemetry.context.with(
           opentelemetry.trace.setSpan(opentelemetry.context.active(), span),
@@ -521,18 +510,7 @@ export class RemixInstrumentation extends InstrumentationBase {
 
         addRequestAttributesToSpan(span, clonedRequest);
         addMatchAttributesToSpan(span, { routeId: params.match.route.id, params: params.match.params });
-
-        const rpcMetadata = getRPCMetadata(opentelemetry.context.active());
-        if (rpcMetadata?.type === RPCType.HTTP) {
-          if (dataRouteId) {
-            rpcMetadata.route = dataRouteId;
-            rpcMetadata.span.setAttribute(SemanticAttributes.HTTP_ROUTE, rpcMetadata.route);
-          }
-          addMatchAttributesToSpan(rpcMetadata.span, {
-            routeId: params.match.route.id,
-            params: params.match.params,
-          });
-        }
+        addDataRouteAttributesToSpan(span, params.request.url, params.match.route.id, "ACTION");
 
         return opentelemetry.context.with(
           opentelemetry.trace.setSpan(opentelemetry.context.active(), span),
@@ -586,11 +564,6 @@ const addRequestAttributesToSpan = (span: Span, request: Request) => {
     [SemanticAttributes.HTTP_METHOD]: request.method,
     [SemanticAttributes.HTTP_URL]: request.url,
   });
-
-  const dataRouteId = getDataRouteId(request.url);
-  if (dataRouteId) {
-    span.setAttribute(RemixSemanticAttributes.MATCH_DATA_ROUTE_ID, dataRouteId);
-  }
 };
 
 const addMatchAttributesToSpan = (span: Span, match: { routeId: string; params: Params<string> }) => {
@@ -624,9 +597,20 @@ const addErrorAttributesToSpan = (span: Span, error: Error) => {
   }
 };
 
-const getDataRouteId = (url: string) => {
-  if (url.includes("_data=")) {
-    return "_data=" + decodeURIComponent(url.substring(url.indexOf("_data=")));
+const addDataRouteAttributesToSpan = (span, url, route, spanNamePrefix) => {
+  const dataRouteId = getDataRouteId(url);
+  if (dataRouteId) {
+    span.setAttribute(RemixSemanticAttributes.MATCH_DATA_ROUTE_ID, dataRouteId);
+    span.setAttribute(SemanticAttributes.HTTP_ROUTE, dataRouteId);
+  }
+  span.updateName(`${spanNamePrefix} ${dataRouteId ?? route}`);
+  return dataRouteId ?? route;
+};
+
+const getDataRouteId = (urlPath: string) => {
+  const url = new URL(urlPath);
+  if (url.searchParams.has("_data")) {
+    return "_data=" + url.searchParams.get("_data");
   }
   return null;
 };
